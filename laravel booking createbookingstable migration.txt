@@ -1,0 +1,45 @@
+<?php
+
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
+
+class CreateBookingsTable extends Migration
+{
+    /**
+     * Run the migrations.
+     *
+     * @return void
+     */
+    public function up()
+    {
+        Schema::create('bookings', function (Blueprint $table) {
+            $table->increments('id');
+            $table->integer('booking_num');
+            $table->dateTime('reserved_date');
+            $table->dateTime('arrival_date');
+            $table->dateTime('departure_date');
+            $table->dateTime('checkout_date');
+            $table->text('arrival_from');
+            $table->text('purpose_of_stay');
+            $table->integer('guest_count');
+            $table->tinyInteger('complimentary_tag')->default(0);
+            $table->integer('company_id')->default(0);
+            $table->integer('property_id')->default(0);
+            $table->tinyInteger('status')->default(1);
+            $table->integer('created_by');
+            $table->integer('updated_by');
+            $table->timestamps();
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     *
+     * @return void
+     */
+    public function down()
+    {
+        Schema::dropIfExists('bookings');
+    }
+}

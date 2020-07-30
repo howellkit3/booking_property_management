@@ -1,0 +1,190 @@
+@extends('frontdesk::layouts.master')
+
+@section('content')
+	<div class="page-container">
+	    <div class="sidebar-menu">
+	        @include('partials.sidebar')
+	    </div>
+	    <div class="main-content">
+	        <div class="row">
+	            @include('partials.dashboard-header')
+	        </div>
+	        {!! Breadcrumbs::render('frontdesk_bookings_view', $bookings->id) !!}
+	        @include('flash::message')
+			<div class="panel-body with-table">
+				<div class="invoice">
+					<div class="row">
+						<div class="col-sm-3 invoice-left">
+							<h3>Booking#{{$bookings->booking_num}}</h3>
+							<h4>{{ucfirst($bookings->first_name) . " ". ucfirst($bookings->last_name)}}</h4>
+							@if(!empty($room_conflict))
+								<span class="badge badge-danger">extension will have a conflict on reservation</span>
+							@endif
+							<span>checkout date  {{date_format(date_create("$bookings->checkout_date"),"m/d/Y")}}</span>
+
+							@if($last_extend_date)
+								<br>
+								<span><b>extend checkout date</b>  {{date_format(date_create("$last_extend_date->extend_date"),"m/d/Y")}}</span>
+							@endif
+
+							@if($bookings->complimentary_tag == 1)
+								<div class="label label-success">Complimentary Tag</div>
+								<div class="label-separator"></div>
+							@endif
+
+							@if(!empty($bookings->guest_company_name))
+								<div class="label label-info">Company Paid</div>
+							@endif
+						</div>
+
+						<div class="col-sm-9 invoice-right">
+							@if($bookings->status == 2)
+								<a href="#">
+									<button type="label" class="btn btn-success btn-icon btn-lg" disabled>
+										Checkout
+										<i class="entypo-check"></i>
+									</button>
+								</a>
+							@else
+								@if((count($rooms)) == 1)
+									<a href="#" data-toggle="modal" data-target="#extend_booking_form{{$bookings->id}}">
+										<button type="button" class="btn btn-green btn-icon btn-lg">
+											Extend Stay
+											<i class="entypo-login"></i>
+										</button>
+									</a>
+								@endif
+
+								<a href="{{ route('frontdesk.checkout.view',$bookings->id) }}">
+									<button type="button" class="btn btn-orange btn-icon btn-lg">
+										Checkout
+										<i class="entypo-logout"></i>
+									</button>
+								</a>
+							@endif
+
+						</div>
+					</div>
+
+					<div class="margin"></div>
+
+					<div class="row">
+						<div class="panel-body with-table">
+							<div class="panel minimal minimal-gray">
+								<div class="panel-heading">
+									<div class="panel-title">
+										<h4>Details</h4>
+									</div>
+									<div class="panel-options">
+
+										<ul class="nav nav-tabs">
+											<li class="active"><a href="#profile-1" data-toggle="tab">Booking Details</a></li>
+											@if (!empty($bookings->booking_payments))
+												<li class=""><a href="#profile-2" data-toggle="tab">Booking Payment</a></li>
+											@endif
+											<li class=""><a href="#profile-3" data-toggle="tab">Booked Room/s</a></li>
+
+										</ul>
+									</div>
+								</div>
+
+								<div class="panel-body">
+
+									<div class="tab-content">
+										<div class="tab-pane active" id="profile-1">
+											<h3>Booking Details</h3>
+											<table class="table table-bordered">
+												<thead>
+													<tr>
+														<th>Reserved Date</th>
+														<th>Arrival Date</th>
+														<th>Check out Date</th>
+														@if($last_extend_date)
+														<th>
+															<b>Extend Checkout Date</b>
+														</th>
+														@endif
+														<th>Arrival From</th>
+														<th>Purpose of stay</th>
+														<th>Guest count</th>
+													</tr>
+												</thead>
+
+												<tbody>
+													<tr>
+														<td>{{date_format(date_create("$bookings->reserved_date"),"m/d/Y")}}</td>
+														<td>{{date_format(date_create("$bookings->arrival_date"),"m/d/Y")}}</td>
+														<td>{{date_format(date_create("$bookings->checkout_date"),"m/d/Y")}}</td>
+														@if($last_extend_date)
+														<td>
+															<b> {{date_format(date_create("$last_extend_date->extend_date"),"m/d/Y")}}</b>
+														</td>
+														@endif
+														<td>{{$bookings->arrival_from}}</td>
+														<td>{{$bookings->purpose_of_stay}}</td>
+														<td>{{$bookings->guest_count}}</td>
+													</tr>
+												</tbody>
+											</table>
+										</div>
+										<div class="tab-pane" id="profile-2">
+											@if (!empty($bookings->booking_payments))
+												<h3>Booking Payment</h3>
+												<table class="table table-bordered">
+													<thead>
+														<tr>
+															<th class="text-center">Deposit</th>
+															<th>Discount %</th>
+															<th>Total Amount</th>
+															<th>Payment Method</th>
+														</tr>
+													</thead>
+													<tbody>
+														<tr>
+															<th>{{number_format($bookings->booking_payments->deposit,2)}}</th>
+															<th>{{$bookings->booking_payments->discount}}%</th>
+															<th>{{number_format($bookings->booking_payments->total_amount,2)}}</th>
+															<th>{{!empty($payment_methods[$bookings->booking_payments->id]) ? $payment_methods[$bookings->booking_payments->id] : " "}}</th>
+														</tr>
+													</tbody>
+												</table>
+											@endif
+										</div>
+										<div class="tab-pane" id="profile-3">
+											<h3>Booked Rooms</h3>
+											<table class="table table-bordered">
+												<thead>
+													<tr>
+														<th class="text-center">Room Number</th>
+														<th>Room name</th>
+														<th>Action</th
+													</tr>
+												</thead>
+												<tbody>
+													@foreach($rooms as $key => $room)
+														<tr>
+															<th>{{$room->room_number}}</th>
+															<th>{{$room->name}}</th>
+															<th>
+																<a href="#" data-toggle="modal" data-target="#booking_change_room{{$room->id}}">
+				                            <button type="button" class="btn btn-info btn-xs">Edit</button>
+				                        </a>
+										            {!!view('frontdesk::bookings.modals.booking_change_room',['room'=>$room,'rooms_list'=>$rooms_list])!!}
+															</th>
+														</tr>
+													@endforeach
+												</tbody>
+											</table>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+	    </div>
+	</div>
+
+{!!view('frontdesk::bookings.modals.extend_booking',['bookings'=>$bookings,'last_extend_date'=>$last_extend_date])!!}
+@stop
