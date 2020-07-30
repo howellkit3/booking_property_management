@@ -1,0 +1,100 @@
+<?php
+
+Route::group(['middleware' => ['web','authFilter','frontdesk','account_status_filter','check_id_property_assigned'], 'prefix' => 'frontdesk', 'namespace' => 'Modules\Frontdesk\Http\Controllers'], function()
+{
+    Route::get('/', 'FrontdeskController@index')->name('frontdesk');
+
+    Route::group(['prefix' => 'reservations'], function()
+	  {
+	    Route::get("/", ["uses" => "ReservationsController@index", "as" => "frontdesk.reservations"]);
+      Route::get("/history", ["uses" => "ReservationsController@showHistory", "as" => "frontdesk.reservations.history"]);
+        Route::get("/form", ["uses" => "ReservationsController@createReservation", "as" => "frontdesk.reservations.create"]);
+        Route::post("/form", ["uses" => "ReservationsController@createReservation", "as" => "frontdesk.reservations.create"]);
+        Route::post("/cancel", ["uses" => "ReservationsController@cancelReservation", "as" => "frontdesk.reservations.cancel"]);
+        Route::group(['prefix' => 'list'], function()
+		{
+			Route::get("/", ["uses" => "ReservationsController@viewReservationList", "as" => "frontdesk.reservations.list"]);
+			Route::get("/{reservation_id}", ["uses" => "ReservationsController@viewReservation", "as" => "frontdesk.reservations.list.view"]);
+			Route::get("/edit/{reservation_id}", ["uses" => "ReservationRoomsController@editRoom", "as" => "frontdesk.reservations.list.edit"]);
+
+			Route::post("/edit_room_reservation", ["uses" => "ReservationRoomsController@updateRoomReservation", "as" => "frontdesk.reservations.list.update"]);
+		});
+
+		Route::group(['prefix' => 'reschedule'], function()
+		{
+			Route::get("/{reservation_id}", ["uses" => "ReservationsController@rescheduleReservation", "as" => "frontdesk.reservations.reschedule"]);
+			Route::post("update", ["uses" => "ReservationsController@rescheduleReservationData", "as" => "frontdesk.reservations.reschedule_reservation"]);
+		});
+
+		Route::group(['prefix' => 'complimentary'], function()
+		{
+			Route::post("/", ["uses" => "ComplimentaryStayReservationsController@markComplimentary", "as" => "frontdesk.complimentary.mark"]);
+		});
+	});
+
+	Route::group(['prefix' => 'room_assignments'], function()
+	{
+		Route::get("/{reservation_id}", ["uses" => "RoomAssignmentsController@index", "as" => "frontdesk.room_assignments"]);
+		Route::get("/add_room/{reservation_id}", ["uses" => "RoomAssignmentsController@addRoom", "as" => "frontdesk.room_assignments.add_room"]);
+
+		Route::get("/assign_room", ["uses" => "RoomAssignmentsController@assignRoom", "as" => "frontdesk.room_assignments.assign"]);
+		Route::post("/assign_room_post", ["uses" => "RoomAssignmentsController@assignRoom", "as" => "frontdesk.room_assignments.assign"]);
+		Route::post("/assign", ["uses" => "RoomAssignmentsController@addRoomReservation", "as" => "frontdesk.room_assignments.add-room"]);
+	});
+	Route::group(['prefix' => 'guests'], function()
+	{
+		Route::get("/", ["uses" => "GuestsController@index", "as" => "frontdesk.guests"]);
+	    Route::get("/create/{reservation_id}", ["uses" => "GuestsController@create", "as" => "frontdesk.guests.create"]);
+	    Route::get("/view/{guest_id}", ["uses" => "GuestsController@view", "as" => "frontdesk.guests.view"]);
+	    Route::post("/create_guest", ["uses" => "GuestsController@createGuest", "as" => "frontdesk.guests.create_guest"]);
+	    Route::post("/update_guest_profiles", ["uses" => "GuestsController@updateGuestProfiles", "as" => "frontdesk.guests.update_guest_profiles"]);
+	    Route::post("/update_guest_company", ["uses" => "GuestsController@updateGuestCompany", "as" => "frontdesk.guests.update_guest_company"]);
+
+	    Route::get("/search_profile/{guest_profile_id}", ["uses" => "GuestsController@searchProfile", "as" => "frontdesk.guests.search_profile"]);
+	});
+
+	Route::group(['prefix' => 'bookings'], function()
+	{
+		Route::get("/", ["uses" => "BookingsController@index", "as" => "frontdesk.bookings"]);
+    Route::get("/history", ["uses" => "BookingsController@showHistory", "as" => "frontdesk.bookings.history"]);
+	    Route::get("/create/{reservation_id}", ["uses" => "BookingsController@create", "as" => "frontdesk.bookings.create"]);
+	    Route::get("/view/{booking_id}", ["uses" => "BookingsController@viewBooking", "as" => "frontdesk.bookings.view"]);
+
+	    Route::post("/create_booking", ["uses" => "BookingsController@createBooking", "as" => "frontdesk.bookings.create_booking"]);
+	    Route::post("/extend", ["uses" => "BookingsController@extendBooking", "as" => "frontdesk.bookings.extend"]);
+	    Route::post("/checkout_booking", ["uses" => "BookingsController@checkoutBooking", "as" => "frontdesk.checkout.view_booking"]);
+	    Route::post("/edit_booking_room", ["uses" => "BookingsController@editBookingRoom", "as" => "frontdesk.bookings.room.edit"]);
+	});
+
+  Route::group(['prefix' => 'checkout'], function()
+  {
+      Route::get("/view/{booking_id}", ["uses" => "CheckoutController@checkoutBookingPage", "as" => "frontdesk.checkout.view"]);
+      Route::post("/addCharges", ["uses" => "BookingAdditionalChargesController@addCharge", "as" => "frontdesk.checkout.add_charges"]);
+      Route::get("/removeCharges/{charge_id}", ["uses" => "BookingAdditionalChargesController@removeCharge", "as" => "frontdesk.checkout.remove_charge"]);
+      Route::post("/updateRoomRate", ["uses" => "BookingRoomsController@updateRoomRate", "as" => "frontdesk.checkout.update_booking_room_rate"]);
+      Route::get("/print/{booking_id}", ["uses" => "CheckoutController@printReceipt", "as" => "frontdesk.checkout.print"]);
+
+      Route::post("/updateBooking", ["uses" => "CheckoutController@updateBooking", "as" => "frontdesk.checkout.update_booking_bill"]);
+
+  });
+
+	Route::group(['prefix' => 'settings'], function()
+	{
+		Route::group(['prefix' => 'preferences'], function()
+		{
+			Route::get("/", ["uses" => "PreferencesController@index", "as" => "frontdesk.settings.preferences"]);
+	        Route::get("/edit/{id}", ["uses" => "PreferencesController@editPreferences", "as" => "frontdesk.settings.preferences.edit"]);
+	        Route::get("/create", ["uses" => "PreferencesController@viewIndexPreferences", "as" => "frontdesk.settings.preferences.create"]);
+
+	        Route::post("/update", ["uses" => "PreferencesController@updatePreferences", "as" => "frontdesk.settings.preferences.update"]);
+	        Route::post("/insert", ["uses" => "PreferencesController@createPreference", "as" => "frontdesk.settings.preferences.insert"]);
+	        Route::post("/delete", ["uses" => "PreferencesController@deletePreference", "as" => "frontdesk.settings.preferences.delete"]);
+		});
+	});
+});
+
+Route::post('/search_registration_number ', array('as' => 'frontdesk.reservation.search',
+    'uses' => 'Modules\Frontdesk\Http\Controllers\ReservationsController@searchReservationNumber'))->middleware('web');
+
+Route::post('/check_room_availability ', array('as' => 'frontdesk.reservation.check_room',
+    'uses' => 'Modules\Frontdesk\Http\Controllers\RoomAssignmentsController@checkRoomAvailability'))->middleware('web');
