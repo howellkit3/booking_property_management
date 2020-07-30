@@ -1,0 +1,237 @@
+<?php
+
+namespace Modules\Frontdesk\Http\Models;
+
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Modules\Frontdesk\Http\Services\DataServices;
+use Carbon;
+
+class Bookings extends Model
+{
+	use Notifiable;
+
+    protected $fillable = [
+        'id'
+         ,'booking_num'
+         ,'reserved_date'
+         ,'arrival_date'
+         ,'departure_date'
+         ,'checkout_date'
+         ,'arrival_from'
+         ,'purpose_of_stay'
+         ,'property_id'
+         ,'company_id'
+         ,'guest_count'
+         ,'status'
+         ,'complimentary_tag'
+         ,'created_by'
+         ,'updated_by'
+    ];
+
+    protected $hidden = [
+        'remember_token',
+    ];
+
+    public function booking_rooms()
+    {
+        return $this->hasMany('Modules\Frontdesk\Http\Models\BookingRooms', 'booking_id');
+    }
+
+    public function booking_payments()
+    {
+        return $this->hasOne('Modules\Frontdesk\Http\Models\BookingPayments', 'booking_id');
+    }
+
+	public function addBookings($booking_details)
+    {
+
+        $booking = SELF::create($booking_details);
+
+        return $booking->id;
+    }
+
+    public function getBookingList()
+    {
+        $DataServices = new DataServices;
+        $property_id = $DataServices->getPropertyID();
+
+        $booking_list = SELF::select('bookings.id'
+					,'bookings.booking_num'
+					,'bookings.reserved_date'
+					,'bookings.checkout_date'
+					,'bookings.status'
+					,'bookings.status'
+					,'bookings.created_at'
+					,'guest_profiles.first_name'
+					,'guest_profiles.middle_name'
+					,'guest_profiles.last_name')
+					->leftjoin('guests', 'guests.booking_id', '=','bookings.id')
+					->leftjoin('guest_profiles', 'guest_profiles.guest_id', '=','guests.id')
+					->where('bookings.property_id' , $property_id)
+					->where('bookings.status' ,'!=' , 2)
+					->orderBy('bookings.id' , 'desc')
+          ->paginate(20);
+
+        return $booking_list;
+    }
+
+		public function getBookingAllList()
+		{
+				$DataServices = new DataServices;
+				$property_id = $DataServices->getPropertyID();
+
+				$booking_list = SELF::select('bookings.id'
+					,'bookings.booking_num'
+					,'bookings.reserved_date'
+					,'bookings.checkout_date'
+					,'bookings.status'
+					,'bookings.status'
+					,'bookings.created_at'
+					,'guest_profiles.first_name'
+					,'guest_profiles.middle_name'
+					,'guest_profiles.last_name')
+					->leftjoin('guests', 'guests.booking_id', '=','bookings.id')
+					->leftjoin('guest_profiles', 'guest_profiles.guest_id', '=','guests.id')
+					->where('bookings.property_id' , $property_id)
+					->orderBy('bookings.id' , 'desc')
+					->paginate(20);
+
+				return $booking_list;
+		}
+
+    public function viewBooking($booking_id)
+    {
+			$DataServices = new DataServices;
+			$property_id = $DataServices->getPropertyID();
+
+      $booking_info = SELF::with('booking_rooms')
+					->select('bookings.*'
+					, 'rooms.id as room_id'
+					,'guest_profiles.first_name'
+					,'guest_profiles.middle_name'
+					,'guest_profiles.last_name'
+					,'guest_companies.name as guest_company_name')
+          ->with('booking_payments')
+          ->where('bookings.id', $booking_id)
+					->where('bookings.property_id', $property_id)
+					->join('booking_rooms', 'booking_rooms.booking_id', '=', 'bookings.id')
+					->leftjoin('rooms', 'rooms.id', '=','booking_rooms.room_id')
+					->leftjoin('guests', 'guests.booking_id', '=','bookings.id')
+					->leftjoin('guest_profiles', 'guest_profiles.guest_id', '=','guests.id')
+					->leftjoin('guest_companies', 'guest_companies.guest_id', '=','guests.id')
+          ->first();
+
+        return $booking_info;
+    }
+
+    public function getBookingOccupiedRooms()
+    {
+        $booking_occupied_room = SELF::with('booking_rooms')
+            ->where('status' , 1)
+            ->get();
+
+        return $booking_occupied_room;
+    }
+
+    public function getBooking($booking_id)
+    {
+        $booking_info = SELF::select('bookings.*'
+							,'booking_payments.vat'
+							,'booking_payments.discount'
+							,'booking_payments.other_charges'
+							,'guest_companies.name as guest_company_name')
+						->with('booking_payments')
+						->leftjoin('booking_payments', 'booking_payments.booking_id', '=','bookings.id')
+						->leftjoin('guests', 'guests.booking_id', '=','bookings.id')
+						->leftjoin('guest_profiles', 'guest_profiles.guest_id', '=','guests.id')
+						->leftjoin('guest_companies', 'guest_companies.guest_id', '=','guests.id')
+            ->where('bookings.id', $booking_id)
+            ->first();
+
+        return $booking_info;
+    }
+
+    public function checkoutBooking($booking_id)
+    {
+        DB::table('bookings')->where('id','=', $booking_id)->update(array('status' => 2));
+
+        return 1;
+    }
+
+    public function getBookingDetails()
+    {
+        $booking_info = SELF::where('bookings.status', 1)
+            ->get();
+
+        return $booking_info;
+    }
+
+		public function getBookingWithRoom()
+		{
+			$DataServices = new DataServices;
+			$property_id = $DataServices->getPropertyID();
+
+			$active_room = SELF::select(
+					'bookings.id',
+					'bookings.id as reservation_id',
+					'bookings.created_at as check_in_date',
+					'booking_rooms.id as booking_rooms_id',
+					'booking_rooms.room_id as room_id',
+					'bookings.reserved_date',
+					'bookings.checkout_date',
+					'rooms.room_number as room_num',
+					'bookings.booking_num'
+					)
+					->join('booking_rooms', 'booking_rooms.booking_id', '=', 'bookings.id')
+					->leftjoin('rooms', 'rooms.id', '=','booking_rooms.room_id')
+					->where('bookings.status', 1)
+					->where('bookings.property_id' , $property_id)
+					->get();
+
+				return $active_room;
+		}
+
+    public function getActiveBookingWithRoom($check_in)
+    {
+        $active_room = SELF::select(
+            'bookings.id',
+            'bookings.id as reservation_id',
+            'booking_rooms.id as booking_rooms_id',
+            'booking_rooms.room_id as room_id'
+            )
+            ->join('booking_rooms', 'booking_rooms.booking_id', '=', 'bookings.id')
+            ->whereDate('bookings.reserved_date', '>=', Carbon::now()->toDateString())
+            ->whereRaw('? between bookings.reserved_date and bookings.checkout_date', [$check_in])
+            ->where('bookings.status' , 1)
+            ->get();
+
+        return $active_room;
+    }
+
+		public function isRoomConflict($room_number, $reservation_date, $check_out)
+		{
+			$DataServices = new DataServices;
+			$property_id = $DataServices->getPropertyID();
+
+			$reservation_date = date('Y-m-d', strtotime($reservation_date));
+
+			$isConflict = SELF::
+					select('bookings.booking_num')
+					->join('booking_rooms', 'booking_rooms.booking_id', '=', 'bookings.id')
+					->join('rooms', 'rooms.id', '=', 'booking_rooms.room_id')
+					->join('extend_stay_bookings', 'extend_stay_bookings.booking_id', '=', 'bookings.id')
+					->whereBetween('extend_stay_bookings.extend_date', [$reservation_date, $check_out])
+					->where('bookings.status' , 1)
+					->where('rooms.room_number' , $room_number)
+					->where('bookings.property_id' , $property_id)
+					->first();
+
+			if(!empty($isConflict)) {
+				return $isConflict->booking_num;
+			}
+
+			return null;
+		}
+}

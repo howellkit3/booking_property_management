@@ -1,0 +1,305 @@
+<?php
+
+namespace Modules\Frontdesk\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Auth;
+use Modules\Frontdesk\Http\Models\Reservations;
+use Modules\Frontdesk\Http\Models\ReservationRooms;
+use Modules\Frontdesk\Http\Models\Properties\Rooms;
+use Modules\Frontdesk\Http\Models\Guests;
+use Modules\Frontdesk\Http\Models\BookingPayments;
+use Modules\Frontdesk\Http\Models\BookingRooms;
+use Modules\Frontdesk\Http\Models\Bookings;
+use Modules\Frontdesk\Http\Models\PaymentMethods;
+use Modules\Frontdesk\Http\Services\DataServices;
+use Modules\Frontdesk\Http\Models\CompanyPaidReservations;
+use Modules\Frontdesk\Http\Models\ExtendStayBookings;
+use Carbon;
+
+class BookingsController extends Controller
+{
+
+	public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
+	public function index()
+  {
+    $Bookings = new Bookings;
+    $book_list = $Bookings->getBookingList();
+
+  	return view('frontdesk::bookings.index',compact('book_list'));
+  }
+
+	public function showHistory()
+	{
+		$Bookings = new Bookings;
+		$book_list = $Bookings->getBookingAllList();
+
+		return view('frontdesk::bookings.history',compact('book_list'));
+	}
+
+  public function create($reservation_id)
+  {
+  	$Reservations = new Reservations;
+    $reservation = $Reservations->getReservation($reservation_id);
+
+    $end = Carbon::parse($reservation['check_out']);
+    $now = Carbon::parse($reservation['check_in']);
+
+    $countDays = $end->diffInDays($now) <= 0 ? 1 : $end->diffInDays($now);
+
+    $guest_count = 0;
+    $total_amount = 0;
+    foreach($reservation['reservation_rooms'] as $key=>$value)
+    {
+        $guest_count+= $value['head_count'];
+        $Rooms = new Rooms;
+        $room_rate = $Rooms->getReservedRooms($value['room_id']);
+        $total_amount+= $room_rate;
+    }
+
+    $reservation_details = $Reservations->getReservationGuestData($reservation_id);
+
+    $Guests = new Guests;
+    $guest_details = $Guests->getGuest($reservation_id);
+    $PaymentMethods = new PaymentMethods;
+
+    $booking_payment_methods = $PaymentMethods->getBookingPayment();
+
+    $CompanyPaidReservations = new CompanyPaidReservations;
+
+    $company_paid_check = $CompanyPaidReservations->checkCompanyPaid($guest_details['guest_id'],$reservation_id);
+
+    return view('frontdesk::bookings.create',compact('reservation','booking_payment_methods','guest_count','total_amount','company_paid_check','countDays'));
+  }
+
+  public function createBooking(Request $request)
+  {
+  	$user_id = Auth::user()->id;
+
+  	if($request->has('_token')) {
+    	if (!empty($booking_details['total_amount'])) {
+      		$request->validate([
+                  'reserved_date' => 'required',
+                  'arrival_date' => 'required',
+                  'departure_date' => 'required',
+                  'checkout_date' => 'required',
+                  'arrival_from' => 'required',
+                  'purpose_of_stay' => 'required',
+                  'guest_count' => 'required',
+                  'total_amount' => 'required',
+                  'payment_method_id' => 'required',
+              ]);
+          }else{
+              $request->validate([
+                  'reserved_date' => 'required',
+                  'arrival_date' => 'required',
+                  'departure_date' => 'required',
+                  'checkout_date' => 'required',
+                  'arrival_from' => 'required',
+                  'purpose_of_stay' => 'required',
+                  'guest_count' => 'required'
+              ]);
+          }
+
+          $booking_details = $request->all();
+
+          $DataServices = new DataServices;
+
+          // bookings
+          $booking_details['Bookings']['booking_num'] = mt_rand(100000, 999999);
+          $booking_details['Bookings']['reserved_date'] = $booking_details['reserved_date'];
+          $booking_details['Bookings']['purpose_of_stay'] = $booking_details['purpose_of_stay'];
+          $booking_details['Bookings']['arrival_date'] = $booking_details['arrival_date'];
+          $booking_details['Bookings']['departure_date'] = $booking_details['departure_date'];
+          $booking_details['Bookings']['checkout_date'] = $booking_details['checkout_date'];
+          $booking_details['Bookings']['arrival_from'] = $booking_details['arrival_from'];
+
+          $booking_details['Bookings']['guest_count'] = $booking_details['guest_count'];
+          $booking_details['Bookings']['complimentary_tag'] = $booking_details['complimentary_tag'];
+          $booking_details['Bookings']['created_by'] = $user_id;
+          $booking_details['Bookings']['updated_by'] = $user_id;
+          $booking_details['Bookings']['property_id'] = $DataServices->getPropertyID($user_id);
+          $booking_details['Bookings']['company_id'] = $DataServices->getCompanyID($booking_details['Bookings']['property_id']);
+
+          $Bookings = new Bookings;
+          $booking_id = $Bookings->addBookings($booking_details['Bookings']);
+
+          if (!empty($booking_details['total_amount'])) {
+
+              $booking_details['BookingPayments']['booking_id'] = $booking_id;
+              $booking_details['BookingPayments']['deposit'] = $booking_details['deposit'];
+
+              $booking_details['BookingPayments']['surcharge'] = 0;
+              $booking_details['BookingPayments']['other_charges'] = 0;
+              $booking_details['BookingPayments']['vat'] = $booking_details['vat'];
+              $booking_details['BookingPayments']['discount'] = $booking_details['discount'];
+              $booking_details['BookingPayments']['total_amount'] = str_replace(",", "", $booking_details['total_amount']);
+              $booking_details['BookingPayments']['payment_method_id'] = $booking_details['payment_method_id'];
+
+              $BookingPayments = new BookingPayments;
+              $BookingPayments->addBookingPayments($booking_details['BookingPayments']);
+          }
+
+          $ReservationRooms = new ReservationRooms;
+          $reserved_room_details = $ReservationRooms->getReservationRoomsList($booking_details['reservation_id']);
+
+          foreach ($reserved_room_details as $key => $book_room) {
+              $booking_details['BookingRooms']['booking_id'] = $booking_id;
+              $booking_details['BookingRooms']['room_id'] = $book_room->id;
+              $booking_details['BookingRooms']['created_by'] = $user_id;
+              $booking_details['BookingRooms']['updated_by'] = $user_id;
+
+              $BookingRooms = new BookingRooms;
+              $BookingRooms->addBookingRooms($booking_details['BookingRooms']);
+          }
+
+          $Reservations = new Reservations;
+          $Reservations->updateReservationStatus(2,$booking_details['reservation_id']);
+
+          $Guests = new Guests;
+          $guest_id = $Guests->findGuest($booking_details['reservation_id']);
+          $Guests->updateGuestBook($guest_id,$booking_id);
+
+          flash('Booking Successful!')->success()->important();
+  	}
+
+      return redirect()->route('frontdesk.bookings');
+  }
+
+  public function viewBooking($booking_id)
+  {
+      $user_id = Auth::user()->id;
+			$DataServices = new DataServices;
+      $property_id = $DataServices->getPropertyID($user_id);
+
+      $Bookings = new Bookings;
+      $bookings = $Bookings->viewBooking($booking_id);
+
+      if(!empty($bookings)) {
+          $Rooms = new Rooms;
+          $rooms = array();
+          $booking_rooms_id = array();
+
+          foreach ($bookings['booking_rooms'] as $key => $room) {
+              $rooms[$key] = $Rooms->find($room['room_id']);
+              $rooms[$key]['booking_rooms'] = $room['id'];
+              array_push($booking_rooms_id, $room['room_id']);
+          }
+
+          $PaymentMethods = new PaymentMethods;
+          $payment_methods = $PaymentMethods->pluck('name', 'id');
+
+          $rooms_list = $Rooms->getAvailableRooms();
+
+          // active reservation
+          $Reservations = new Reservations;
+          $active_resrvation_rooms_id = $Reservations->getActiveReservationWithRoom($bookings['reserved_date']);
+
+					$room_conflict = $Reservations->isRoomConflict($bookings->room_id, $bookings->checkout_date);
+
+          // active booking
+          $active_booking_rooms_id = $Bookings->getActiveBookingWithRoom($bookings['reserved_date']);
+
+          $room_ids = array();
+          foreach ($active_resrvation_rooms_id as $key3 => $roomId) {
+              array_push($room_ids, $roomId['room_id']);
+          }
+
+          foreach ($active_booking_rooms_id as $key4 => $roomId) {
+              array_push($room_ids, $roomId['room_id']);
+          }
+
+          foreach ($booking_rooms_id as $key5 => $booking_room) {
+              $room_ids = array_diff($room_ids, [$booking_room]);
+          }
+
+          $ExtendStayBookings = new ExtendStayBookings;
+          $last_extend_date = $ExtendStayBookings->getLastExtendDate($booking_id);
+
+          $rooms_list = $Rooms->selectRooms($property_id, $bookings['guest_count'],$room_ids);
+
+          return view('frontdesk::bookings.view',compact('room_conflict','bookings','rooms','payment_methods','rooms_list','last_extend_date'));
+      }
+
+      flash('No Bookings Found')->error()->important();
+      return redirect()->route('frontdesk.bookings');
+  }
+
+  public function extendBooking(Request $request)
+  {
+      $user_id = Auth::user()->id;
+      if($request->has('_token')) {
+          $booking_extend = $request->all();
+          $booking_extend['ExtendStayBookings']['booking_id'] = $booking_extend['booking_id'];
+          $booking_extend['ExtendStayBookings']['extend_date'] = $booking_extend['extend_date'];
+          $booking_extend['ExtendStayBookings']['guest_count'] = $booking_extend['guest_count'];
+          $booking_extend['ExtendStayBookings']['created_by'] = $user_id;
+          $booking_extend['ExtendStayBookings']['updated_by'] = $user_id;
+
+          $ExtendStayBookings = new ExtendStayBookings;
+          $booking_id = $ExtendStayBookings->addExtendBooking($booking_extend['ExtendStayBookings']);
+
+          flash('Extend Stay Successfully Book!')->success()->important();
+      }
+
+      return redirect()->back();
+  }
+
+  public function checkoutBooking(Request $request)
+  {
+      if($request->has('_token')) {
+
+          $checkout_details = $request->all();
+
+          if (!empty($checkout_details['total_amount'])) {
+              $checkout_details['BookingPayments']['booking_id'] = $checkout_details['booking_id'];
+              $checkout_details['BookingPayments']['deposit'] = 0;
+              $checkout_details['BookingPayments']['surcharge'] = !empty($checkout_details['surcharge']) ? $this->floatvalue($checkout_details['surcharge']) : 0 ;
+              $checkout_details['BookingPayments']['other_charges'] = 0;
+              $checkout_details['BookingPayments']['vat'] = $this->floatvalue($checkout_details['vat']);
+              $checkout_details['BookingPayments']['discount'] = $this->floatvalue($checkout_details['discount']);
+              $checkout_details['BookingPayments']['total_amount'] = $this->floatvalue($checkout_details['total_amount']);
+              $checkout_details['BookingPayments']['payment_method_id'] = $checkout_details['payment_method_id'];
+
+              $BookingPayments = new BookingPayments;
+              $BookingPayments->addBookingPayments($checkout_details['BookingPayments']);
+          }
+
+          $Bookings = new Bookings;
+          $Bookings->checkoutBooking($checkout_details['booking_id']);
+
+          flash('Successfully Checkout!')->success()->important();
+
+          return redirect()->route('frontdesk.bookings');
+
+      }
+  }
+
+	private function floatvalue($val){
+	  $val = str_replace(",",".",$val);
+	  $val = preg_replace('/\.(?=.*\.)/', '', $val);
+	  return floatval($val);
+	}
+
+  public function editBookingRoom(Request $request)
+  {
+      if($request->has('_token')) {
+
+          $booking_rooms = $request->all();
+
+          $BookingRooms = new BookingRooms;
+          $BookingRooms->updateBookingRooms($booking_rooms);
+
+          flash('Successfully Change the room!')->success()->important();
+
+          return redirect()->back();
+
+      }
+  }
+}
